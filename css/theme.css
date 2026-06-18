@@ -1,0 +1,179 @@
+/* =============================================
+   THEME.CSS - CSS Custom Properties for Light/Dark
+   ============================================= */
+
+:root,
+[data-theme="light"] {
+  /* Brand */
+  --brand-primary: hsl(220, 85%, 57%);
+  --brand-primary-hover: hsl(220, 85%, 47%);
+  --brand-primary-light: hsl(220, 85%, 95%);
+  --brand-secondary: hsl(260, 75%, 60%);
+  --brand-accent: hsl(175, 70%, 45%);
+  --brand-gradient: linear-gradient(135deg, hsl(220,85%,57%), hsl(260,75%,60%));
+  --brand-gradient-alt: linear-gradient(135deg, hsl(175,70%,45%), hsl(220,85%,57%));
+
+  /* Backgrounds */
+  --bg-page: hsl(220, 20%, 96%);
+  --bg-card: hsl(0, 0%, 100%);
+  --bg-card-hover: hsl(220, 20%, 98%);
+  --bg-sidebar: hsl(222, 47%, 11%);
+  --bg-sidebar-item-hover: hsl(222, 37%, 18%);
+  --bg-sidebar-item-active: hsl(220, 85%, 57%);
+  --bg-input: hsl(220, 15%, 97%);
+  --bg-input-focus: hsl(0, 0%, 100%);
+  --bg-overlay: hsla(222, 47%, 11%, 0.5);
+  --bg-tag: hsl(220, 20%, 93%);
+  --bg-table-alt: hsl(220, 20%, 98%);
+  --bg-table-hover: hsl(220, 85%, 97%);
+  --bg-loading: hsl(222, 47%, 11%);
+
+  /* Text */
+  --text-primary: hsl(222, 47%, 11%);
+  --text-secondary: hsl(220, 15%, 45%);
+  --text-muted: hsl(220, 15%, 60%);
+  --text-inverse: hsl(0, 0%, 100%);
+  --text-sidebar: hsl(220, 20%, 85%);
+  --text-sidebar-active: hsl(0, 0%, 100%);
+
+  /* Borders */
+  --border-color: hsl(220, 20%, 88%);
+  --border-focus: hsl(220, 85%, 57%);
+  --border-input: hsl(220, 20%, 85%);
+
+  /* Status Colors */
+  --status-active: hsl(142, 70%, 45%);
+  --status-active-bg: hsl(142, 70%, 94%);
+  --status-graduated: hsl(220, 85%, 57%);
+  --status-graduated-bg: hsl(220, 85%, 95%);
+  --status-suspended: hsl(25, 90%, 55%);
+  --status-suspended-bg: hsl(25, 90%, 94%);
+  --status-withdrawn: hsl(0, 75%, 55%);
+  --status-withdrawn-bg: hsl(0, 75%, 95%);
+
+  /* Semantic */
+  --success: hsl(142, 70%, 45%);
+  --success-bg: hsl(142, 70%, 94%);
+  --warning: hsl(38, 92%, 50%);
+  --warning-bg: hsl(38, 92%, 94%);
+  --danger: hsl(0, 75%, 55%);
+  --danger-bg: hsl(0, 75%, 95%);
+  --info: hsl(200, 85%, 50%);
+  --info-bg: hsl(200, 85%, 94%);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px hsla(220, 30%, 15%, 0.08), 0 1px 2px hsla(220, 30%, 15%, 0.04);
+  --shadow-md: 0 4px 12px hsla(220, 30%, 15%, 0.10), 0 2px 4px hsla(220, 30%, 15%, 0.06);
+  --shadow-lg: 0 10px 30px hsla(220, 30%, 15%, 0.12), 0 4px 8px hsla(220, 30%, 15%, 0.06);
+  --shadow-xl: 0 20px 60px hsla(220, 30%, 15%, 0.15), 0 8px 20px hsla(220, 30%, 15%, 0.08);
+  --shadow-brand: 0 8px 24px hsla(220, 85%, 57%, 0.3);
+  --shadow-inset: inset 0 2px 4px hsla(220, 30%, 15%, 0.06);
+
+  /* Glass effect */
+  --glass-bg: hsla(0, 0%, 100%, 0.85);
+  --glass-border: hsla(0, 0%, 100%, 0.5);
+  --glass-shadow: 0 8px 32px hsla(220, 30%, 15%, 0.12);
+  --glass-blur: blur(20px);
+
+  /* Layout */
+  --sidebar-width: 260px;
+  --sidebar-width-collapsed: 72px;
+  --header-height: 64px;
+  --border-radius: 12px;
+  --border-radius-sm: 8px;
+  --border-radius-lg: 16px;
+  --border-radius-xl: 24px;
+  --border-radius-full: 9999px;
+
+  /* Typography */
+  --font-base: 'Inter', system-ui, sans-serif;
+  --font-display: 'Outfit', system-ui, sans-serif;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Z-indices */
+  --z-sidebar: 100;
+  --z-header: 200;
+  --z-dropdown: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-loading: 600;
+
+  /* Auth gradient */
+  --auth-left-gradient: linear-gradient(160deg, hsl(222, 47%, 11%) 0%, hsl(222, 47%, 20%) 100%);
+}
+
+[data-theme="dark"] {
+  /* Brand - stays vivid */
+  --brand-primary: hsl(220, 85%, 65%);
+  --brand-primary-hover: hsl(220, 85%, 75%);
+  --brand-primary-light: hsl(220, 85%, 15%);
+  --brand-secondary: hsl(260, 75%, 68%);
+  --brand-accent: hsl(175, 70%, 50%);
+
+  /* Backgrounds */
+  --bg-page: hsl(220, 20%, 9%);
+  --bg-card: hsl(220, 20%, 13%);
+  --bg-card-hover: hsl(220, 20%, 16%);
+  --bg-sidebar: hsl(220, 20%, 7%);
+  --bg-sidebar-item-hover: hsl(220, 20%, 14%);
+  --bg-sidebar-item-active: hsl(220, 85%, 57%);
+  --bg-input: hsl(220, 20%, 16%);
+  --bg-input-focus: hsl(220, 20%, 19%);
+  --bg-overlay: hsla(220, 20%, 4%, 0.7);
+  --bg-tag: hsl(220, 20%, 18%);
+  --bg-table-alt: hsl(220, 20%, 11%);
+  --bg-table-hover: hsl(220, 85%, 10%);
+  --bg-loading: hsl(220, 20%, 7%);
+
+  /* Text */
+  --text-primary: hsl(220, 20%, 92%);
+  --text-secondary: hsl(220, 15%, 65%);
+  --text-muted: hsl(220, 15%, 50%);
+  --text-inverse: hsl(0, 0%, 100%);
+  --text-sidebar: hsl(220, 20%, 75%);
+  --text-sidebar-active: hsl(0, 0%, 100%);
+
+  /* Borders */
+  --border-color: hsl(220, 20%, 22%);
+  --border-focus: hsl(220, 85%, 65%);
+  --border-input: hsl(220, 20%, 22%);
+
+  /* Status */
+  --status-active: hsl(142, 60%, 50%);
+  --status-active-bg: hsl(142, 60%, 12%);
+  --status-graduated: hsl(220, 85%, 65%);
+  --status-graduated-bg: hsl(220, 85%, 12%);
+  --status-suspended: hsl(25, 90%, 60%);
+  --status-suspended-bg: hsl(25, 90%, 12%);
+  --status-withdrawn: hsl(0, 70%, 60%);
+  --status-withdrawn-bg: hsl(0, 70%, 12%);
+
+  /* Semantic */
+  --success: hsl(142, 60%, 50%);
+  --success-bg: hsl(142, 60%, 12%);
+  --warning: hsl(38, 85%, 55%);
+  --warning-bg: hsl(38, 85%, 12%);
+  --danger: hsl(0, 70%, 60%);
+  --danger-bg: hsl(0, 70%, 12%);
+  --info: hsl(200, 80%, 55%);
+  --info-bg: hsl(200, 80%, 12%);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px hsla(220, 30%, 5%, 0.3), 0 1px 2px hsla(220, 30%, 5%, 0.2);
+  --shadow-md: 0 4px 12px hsla(220, 30%, 5%, 0.4), 0 2px 4px hsla(220, 30%, 5%, 0.2);
+  --shadow-lg: 0 10px 30px hsla(220, 30%, 5%, 0.5), 0 4px 8px hsla(220, 30%, 5%, 0.2);
+  --shadow-xl: 0 20px 60px hsla(220, 30%, 5%, 0.6), 0 8px 20px hsla(220, 30%, 5%, 0.3);
+  --shadow-brand: 0 8px 24px hsla(220, 85%, 57%, 0.2);
+
+  /* Glass */
+  --glass-bg: hsla(220, 20%, 13%, 0.85);
+  --glass-border: hsla(220, 20%, 30%, 0.3);
+  --glass-shadow: 0 8px 32px hsla(220, 30%, 5%, 0.4);
+
+  /* Auth */
+  --auth-left-gradient: linear-gradient(160deg, hsl(222, 47%, 6%) 0%, hsl(222, 47%, 14%) 100%);
+}

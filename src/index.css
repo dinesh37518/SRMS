@@ -1,0 +1,15 @@
+/*
+ * index.css – Consolidates the modular styling sheets for the React application
+ */
+
+@import "../css/theme.css";
+@import "../css/base.css";
+@import "../css/components.css";
+@import "../css/layout.css";
+@import "../css/animations.css";
+@import "../css/placement.css";
+
+/* App mount fixes */
+#root {
+  display: contents;
+}
