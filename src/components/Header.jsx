@@ -12,6 +12,7 @@ const BREADCRUMB_MAP = {
   'admin-training': 'Manage Training Content',
   'admin-activity': 'System Activity Log',
   'admin-settings': 'System Settings',
+  'admin-admins': 'Manage Class Advisors',
   'student-dashboard': 'Dashboard',
   'student-profile': 'My Profile',
   'student-placement': 'My Placement Status & History',
@@ -41,14 +42,18 @@ export default function Header({ activeView, onNavigate, onMobileMenuOpen, onSea
   if (!currentUser) return null;
 
   const isPhoto = !!currentUser.profilePhoto;
-  const displayName = currentUser.role === 'admin' ? 'Administrator' : currentUser.fullName;
-  const displayRole = currentUser.role === 'admin' ? 'System Admin' : 'Student';
+  const displayName = currentUser.role === 'admin'
+    ? (currentUser.isMainAdmin ? 'Main Administrator' : currentUser.fullName)
+    : currentUser.fullName;
+  const displayRole = currentUser.role === 'admin'
+    ? (currentUser.isMainAdmin ? 'Main Admin' : `Class Advisor (${currentUser.representedClass ? currentUser.representedClass.replace('B.E. ', '').replace('B.Tech ', '').replace('M.E. ', '') : 'Class'})`)
+    : 'Student';
 
   const handleLogout = () => {
     setDropdownOpen(false);
     showConfirm({
       title: 'Sign Out',
-      message: 'Are you sure you want to sign out of SRMS?',
+      message: 'Are you sure you want to sign out of CareerBridge?',
       confirmText: 'Sign Out',
       type: 'danger',
       onConfirm: logout,
@@ -83,8 +88,8 @@ export default function Header({ activeView, onNavigate, onMobileMenuOpen, onSea
       </div>
 
       <div className="header-right">
-        {/* Global search — admin only */}
-        {currentUser.role === 'admin' && (
+        {/* Global search — branch admin only */}
+        {currentUser.role === 'admin' && !currentUser.isMainAdmin && (
           <div className="header-search" id="header-search-wrap">
             <div className="search-box">
               <i className="fas fa-search search-icon"></i>

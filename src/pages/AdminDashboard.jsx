@@ -16,12 +16,24 @@ import {
 const statusBadgeClass = (s) => ({ Active: 'active', Graduated: 'graduated', Suspended: 'suspended', Withdrawn: 'withdrawn' }[s] || 'active');
 
 const COURSES = [
-  'B.E. Computer Science and Engineering',
-  'B.E. Electronics and Communication Engineering',
-  'B.E. Electrical and Electronics Engineering',
-  'B.E. Mechanical Engineering',
-  'B.E. Civil Engineering',
-  'B.Tech Information Technology',
+  'B.E. Computer Science and Engineering - Sec A',
+  'B.E. Computer Science and Engineering - Sec B',
+  'B.E. Computer Science and Engineering - Sec C',
+  'B.E. Electronics and Communication Engineering - Sec A',
+  'B.E. Electronics and Communication Engineering - Sec B',
+  'B.E. Electronics and Communication Engineering - Sec C',
+  'B.E. Electrical and Electronics Engineering - Sec A',
+  'B.E. Electrical and Electronics Engineering - Sec B',
+  'B.E. Electrical and Electronics Engineering - Sec C',
+  'B.Tech Information Technology - Sec A',
+  'B.Tech Information Technology - Sec B',
+  'B.Tech Information Technology - Sec C',
+  'B.E. Mechanical Engineering - Sec A',
+  'B.E. Mechanical Engineering - Sec B',
+  'B.E. Mechanical Engineering - Sec C',
+  'B.E. Civil Engineering - Sec A',
+  'B.E. Civil Engineering - Sec B',
+  'B.E. Civil Engineering - Sec C',
   'B.Tech Artificial Intelligence and Data Science',
   'B.Tech Cyber Security',
   'B.Tech Robotics and Automation',
@@ -52,13 +64,14 @@ function Avatar({ student, size = 36 }) {
 
 // Student Form (Add / Edit)
 function StudentFormModal({ student, onSave, onClose }) {
+  const { currentUser } = useAuth();
   const isEdit = !!student;
   const [form, setForm] = useState({
     studentId: student?.studentId || '', registerNumber: student?.registerNumber || '',
     fullName: student?.fullName || '',
     email: student?.email || '', phone: student?.phone || '',
     password: '', dob: student?.dob || '', address: student?.address || '',
-    course: student?.course || '', yearLevel: student?.yearLevel || '',
+    course: student?.course || (currentUser?.isMainAdmin ? '' : currentUser?.representedClass || ''), yearLevel: student?.yearLevel || '',
     enrollmentDate: student?.enrollmentDate || '',
     status: student?.status || 'Active',
   });
@@ -178,7 +191,7 @@ function StudentFormModal({ student, onSave, onClose }) {
         <div className="form-group flex-1">
           <label className="form-label">Course *</label>
           <div className="input-wrapper"><i className="fas fa-book input-icon"></i>
-            <select className="form-input form-select" value={form.course} onChange={sf('course')}>
+            <select className="form-input form-select" value={form.course} onChange={sf('course')} disabled={currentUser && !currentUser.isMainAdmin}>
               <option value="">Select Course</option>
               {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -744,10 +757,132 @@ function EditCompanyPrepModal({ companyKey, onSave, onClose, showToast }) {
   );
 }
 
+function BranchAdminFormModal({ admin, onSave, onClose, showToast }) {
+  const isEdit = !!admin;
+  const [form, setForm] = useState({
+    fullName: admin?.fullName || '',
+    email: admin?.email || '',
+    password: '',
+    representedClass: admin?.representedClass || '',
+  });
+  const [errors, setErrors] = useState({});
+
+  const sf = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+
+  const validate = () => {
+    const e = {};
+    if (!form.fullName.trim()) e.fullName = 'Name is required.';
+    if (!isValidEmail(form.email)) e.email = 'Valid email is required.';
+    else if (Storage.emailExists(form.email, isEdit ? admin.email : null)) e.email = 'Email already registered.';
+    if (!form.representedClass) e.representedClass = 'Select a represented class.';
+    if (!isEdit && !isStrongPassword(form.password)) e.password = 'Min 8 chars with uppercase, lowercase, number.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+    if (isEdit) {
+      const updates = { fullName: form.fullName, representedClass: form.representedClass };
+      Storage.updateUser(admin.email, updates);
+      Storage.addActivity({ type: 'update', text: `Main Admin updated class advisor <strong>${form.fullName}</strong> (${form.representedClass})` });
+      showToast('Updated', 'Class advisor record updated.', 'success');
+    } else {
+      const newAdmin = {
+        role: 'admin',
+        email: form.email.toLowerCase(),
+        passwordHash: hashPassword(form.password),
+        fullName: form.fullName,
+        representedClass: form.representedClass,
+        isMainAdmin: false,
+        createdAt: new Date().toISOString(),
+      };
+      Storage.saveUser(newAdmin);
+      Storage.addActivity({ type: 'create', text: `Main Admin added class advisor <strong>${form.fullName}</strong> for ${form.representedClass}` });
+      showToast('Created', 'Class advisor account created successfully.', 'success');
+    }
+    onSave();
+    onClose();
+  };
+
+  return (
+    <form className="modal-form" onSubmit={handleSubmit} noValidate>
+      <div className="form-group">
+        <label className="form-label">Full Name *</label>
+        <div className="input-wrapper"><i className="fas fa-user input-icon"></i><input className="form-input" value={form.fullName} onChange={sf('fullName')} placeholder="e.g. Prof. Jane Doe" /></div>
+        {errors.fullName && <span className="field-error">{errors.fullName}</span>}
+      </div>
+      <div className="form-group">
+        <label className="form-label">Email Address *</label>
+        <div className="input-wrapper"><i className="fas fa-envelope input-icon"></i><input type="email" className="form-input" value={form.email} onChange={sf('email')} readOnly={isEdit} placeholder="e.g. jane.doe@srms.edu" /></div>
+        {errors.email && <span className="field-error">{errors.email}</span>}
+      </div>
+      {!isEdit && (
+        <div className="form-group">
+          <label className="form-label">Password *</label>
+          <div className="input-wrapper"><i className="fas fa-lock input-icon"></i><input type="password" className="form-input" value={form.password} onChange={sf('password')} placeholder="Min 8 chars" /></div>
+          {errors.password && <span className="field-error">{errors.password}</span>}
+        </div>
+      )}
+      <div className="form-group">
+        <label className="form-label">Represented Class *</label>
+        <div className="input-wrapper"><i className="fas fa-university input-icon"></i>
+          <select className="form-input form-select" value={form.representedClass} onChange={sf('representedClass')}>
+            <option value="">Select Course/Class</option>
+            {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        {errors.representedClass && <span className="field-error">{errors.representedClass}</span>}
+      </div>
+      <div className="modal-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="submit" className="btn btn-primary">{isEdit ? 'Save Changes' : 'Create Advisor'}</button>
+      </div>
+    </form>
+  );
+}
+
+function ResetAdminPasswordModal({ admin, onClose, showToast }) {
+  const [np, setNp] = useState(''); const [cp, setCp] = useState('');
+  const [err, setErr] = useState({});
+  const handle = (e) => {
+    e.preventDefault();
+    const errs = {};
+    if (!isStrongPassword(np)) errs.np = 'Min 8 chars with uppercase, lowercase, number.';
+    if (np !== cp) errs.cp = 'Passwords do not match.';
+    if (Object.keys(errs).length) { setErr(errs); return; }
+    Storage.updateUser(admin.email, { passwordHash: hashPassword(np) });
+    Storage.addActivity({ type: 'reset', text: `Password reset for class advisor <strong>${admin.fullName}</strong>` });
+    showToast('Password Reset', `Password updated for ${admin.fullName}`, 'success');
+    onClose();
+  };
+  return (
+    <form className="modal-form" onSubmit={handle} noValidate>
+      <p style={{ marginBottom: 16 }}>Reset password for class advisor <strong>{admin.fullName}</strong></p>
+      <div className="form-group">
+        <label className="form-label">New Password</label>
+        <div className="input-wrapper"><i className="fas fa-lock input-icon"></i><input type="password" className="form-input" value={np} onChange={e => setNp(e.target.value)} /></div>
+        {err.np && <span className="field-error">{err.np}</span>}
+      </div>
+      <div className="form-group">
+        <label className="form-label">Confirm Password</label>
+        <div className="input-wrapper"><i className="fas fa-lock input-icon"></i><input type="password" className="form-input" value={cp} onChange={e => setCp(e.target.value)} /></div>
+        {err.cp && <span className="field-error">{err.cp}</span>}
+      </div>
+      <div className="modal-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="submit" className="btn btn-primary">Reset Password</button>
+      </div>
+    </form>
+  );
+}
+
 export default function AdminDashboard({ activeView, onNavigate }) {
-  const { showToast, showConfirm, showModal, closeModal, applyTheme, theme, refreshUser } = useAuth();
+  const { currentUser, showToast, showConfirm, showModal, closeModal, applyTheme, theme, refreshUser } = useAuth();
   const [students, setStudents] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [branchAdmins, setBranchAdmins] = useState([]);
   const [search, setSearch] = useState('');
   const [filterCourse, setFilterCourse] = useState('');
   const [filterYear, setFilterYear] = useState('');
@@ -768,10 +903,165 @@ export default function AdminDashboard({ activeView, onNavigate }) {
   // Manage Training States
   const [trTab, setTrTab] = useState('aptitude');
 
+  const handleImportAptitude = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target.result;
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        
+        const parsedQuestions = json.map((row, idx) => {
+          const getVal = (keys) => {
+            const key = Object.keys(row).find(k => keys.includes(k.toLowerCase().trim()));
+            return key ? String(row[key]).trim() : '';
+          };
+          
+          const category = getVal(['category']) || 'Quantitative Aptitude';
+          const questionText = getVal(['question', 'question text', 'questiontext']);
+          const optA = getVal(['optiona', 'option a', 'a']);
+          const optB = getVal(['optionb', 'option b', 'b']);
+          const optC = getVal(['optionc', 'option c', 'c']);
+          const optD = getVal(['optiond', 'option d', 'd']);
+          const correctVal = getVal(['correctoption', 'correct option', 'correct', 'answer']);
+          const explanation = getVal(['explanation']);
+          
+          if (!questionText || !optA || !optB) {
+            throw new Error(`Row ${idx + 2} has missing question text or options.`);
+          }
+          
+          let correctOption = 0;
+          if (/^[a-d]$/i.test(correctVal)) {
+            correctOption = correctVal.toUpperCase().charCodeAt(0) - 65;
+          } else {
+            const parsedNum = parseInt(correctVal);
+            if (!isNaN(parsedNum) && parsedNum >= 0 && parsedNum <= 3) {
+              correctOption = parsedNum;
+            }
+          }
+          
+          return {
+            id: 'apt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            category,
+            question: questionText,
+            options: [optA, optB, optC || '', optD || ''],
+            correctOption,
+            explanation
+          };
+        });
+        
+        if (!parsedQuestions.length) {
+          showToast('Error', 'No valid questions found in sheet.', 'error');
+          return;
+        }
+        
+        const existing = Storage.getAptitudeQuestions();
+        Storage.setAptitudeQuestions([...existing, ...parsedQuestions]);
+        showToast('Success', `Imported ${parsedQuestions.length} aptitude questions!`, 'success');
+        load();
+      } catch (err) {
+        console.error(err);
+        showToast('Import Failed', err.message || 'Could not parse Excel file.', 'error');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleImportCoding = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target.result;
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        
+        const parsedCoding = json.map((row, idx) => {
+          const getVal = (keys) => {
+            const key = Object.keys(row).find(k => keys.includes(k.toLowerCase().trim()));
+            return key ? String(row[key]).trim() : '';
+          };
+          
+          const title = getVal(['title']);
+          const description = getVal(['description', 'desc', 'problem description']);
+          const difficulty = getVal(['difficulty', 'level']) || 'Basic';
+          const category = getVal(['category']) || 'Basic problems';
+          const language = getVal(['language', 'lang']) || 'Python';
+          const constraints = getVal(['constraints']);
+          const inputFormat = getVal(['inputformat', 'input format']);
+          const outputFormat = getVal(['outputformat', 'output format']);
+          const sampleInput = getVal(['sampleinput', 'sample input']);
+          const sampleOutput = getVal(['sampleoutput', 'sample output']);
+          const template = getVal(['template', 'code template']);
+          
+          if (!title || !description) {
+            throw new Error(`Row ${idx + 2} has missing title or description.`);
+          }
+          
+          return {
+            id: 'code_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            title,
+            description,
+            difficulty,
+            category,
+            language,
+            constraints,
+            inputFormat,
+            outputFormat,
+            sampleInput,
+            sampleOutput,
+            template
+          };
+        });
+        
+        if (!parsedCoding.length) {
+          showToast('Error', 'No valid coding problems found in sheet.', 'error');
+          return;
+        }
+        
+        const existing = Storage.getCodingQuestions();
+        Storage.setCodingQuestions([...existing, ...parsedCoding]);
+        showToast('Success', `Imported ${parsedCoding.length} coding challenges!`, 'success');
+        load();
+      } catch (err) {
+        console.error(err);
+        showToast('Import Failed', err.message || 'Could not parse Excel file.', 'error');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const load = useCallback(() => {
-    setStudents(Storage.getAllStudents());
-    setActivity(Storage.getActivity());
-  }, []);
+    let allSt = Storage.getAllStudents();
+    if (currentUser && !currentUser.isMainAdmin) {
+      allSt = allSt.filter(s => s.course === currentUser.representedClass);
+    }
+    setStudents(allSt);
+
+    let allAct = Storage.getActivity();
+    if (currentUser && !currentUser.isMainAdmin) {
+      allAct = allAct.filter(act => {
+        if (!act.userEmail) return true;
+        const u = Storage.getUser(act.userEmail);
+        return !u || (u.role === 'student' && u.course === currentUser.representedClass);
+      });
+    }
+    setActivity(allAct);
+    setBranchAdmins(Storage.getAllBranchAdmins());
+  }, [currentUser]);
 
   useEffect(() => { load(); }, [load, activeView]);
 
@@ -842,10 +1132,22 @@ export default function AdminDashboard({ activeView, onNavigate }) {
   };
 
   const openAddModal = () => showModal({ title: 'Add New Student', maxWidth: '620px', content: <StudentFormModal onSave={load} onClose={closeModal} /> });
-  const openEditModal = (email) => { const s = Storage.getUser(email); showModal({ title: 'Edit Student', maxWidth: '620px', content: <StudentFormModal student={s} onSave={load} onClose={closeModal} /> }); };
+  const openEditModal = (email) => {
+    const s = Storage.getUser(email);
+    if (!s) return;
+    if (currentUser && !currentUser.isMainAdmin && s.course !== currentUser.representedClass) {
+      showToast('Unauthorized', 'You do not have permission to edit this student.', 'error');
+      return;
+    }
+    showModal({ title: 'Edit Student', maxWidth: '620px', content: <StudentFormModal student={s} onSave={load} onClose={closeModal} /> });
+  };
   const openViewModal = (email) => {
     const s = Storage.getUser(email);
     if (!s) return;
+    if (currentUser && !currentUser.isMainAdmin && s.course !== currentUser.representedClass) {
+      showToast('Unauthorized', 'You do not have permission to view this student.', 'error');
+      return;
+    }
     showModal({
       title: 'Student Profile', maxWidth: '540px',
       content: (
@@ -878,12 +1180,16 @@ export default function AdminDashboard({ activeView, onNavigate }) {
   const confirmDelete = (email) => {
     const s = Storage.getUser(email);
     if (!s) return;
+    if (currentUser && !currentUser.isMainAdmin && s.course !== currentUser.representedClass) {
+      showToast('Unauthorized', 'You do not have permission to delete this student.', 'error');
+      return;
+    }
     showConfirm({ title: 'Delete Student', message: `Delete <strong>${s.fullName}</strong>? This cannot be undone.`, confirmText: 'Delete', type: 'danger', onConfirm: () => { Storage.deleteUser(email); Storage.addActivity({ type: 'delete', text: `Admin deleted <strong>${s.fullName}</strong>`, userEmail: email }); showToast('Deleted', `${s.fullName} removed.`, 'success'); setSelected(p => { p.delete(email); return new Set(p); }); load(); } });
   };
 
   const bulkDelete = () => {
     if (!selected.size) return;
-    showConfirm({ title: 'Bulk Delete', message: `Delete <strong>${selected.size}</strong> student${selected.size > 1 ? 's' : ''}?`, confirmText: `Delete ${selected.size}`, type: 'danger', onConfirm: () => { selected.forEach(email => { const s = Storage.getUser(email); Storage.deleteUser(email); Storage.addActivity({ type: 'delete', text: `Admin deleted <strong>${s?.fullName || email}</strong>`, userEmail: email }); }); showToast('Deleted', `${selected.size} students removed.`, 'success'); setSelected(new Set()); load(); } });
+    showConfirm({ title: 'Bulk Delete', message: `Delete <strong>${selected.size}</strong> student${selected.size > 1 ? 's' : ''}?`, confirmText: `Delete ${selected.size}`, type: 'danger', onConfirm: () => { selected.forEach(email => { const s = Storage.getUser(email); if (currentUser && !currentUser.isMainAdmin && s && s.course !== currentUser.representedClass) return; Storage.deleteUser(email); Storage.addActivity({ type: 'delete', text: `Admin deleted <strong>${s?.fullName || email}</strong>`, userEmail: email }); }); showToast('Deleted', `${selected.size} students removed.`, 'success'); setSelected(new Set()); load(); } });
   };
 
   // CSV/Backup
@@ -897,11 +1203,18 @@ export default function AdminDashboard({ activeView, onNavigate }) {
       const defaultHash = hashPassword('Student@123');
       rows.forEach(s => {
         if (!s.email) return;
+        if (currentUser && !currentUser.isMainAdmin) {
+          s.course = currentUser.representedClass;
+        }
         if (s.registerNumber && Storage.registerNumberExists(s.registerNumber, s.email)) {
           duplicates++;
           return;
         }
         const ex = Storage.getUser(s.email);
+        if (currentUser && !currentUser.isMainAdmin && ex && ex.course !== currentUser.representedClass) {
+          duplicates++;
+          return;
+        }
         let sid = s.studentId;
         if (!sid || Storage.studentIdExists(sid, s.email)) sid = generateStudentId();
         if (ex) {
@@ -939,6 +1252,132 @@ export default function AdminDashboard({ activeView, onNavigate }) {
       {/* Hidden file inputs */}
       <input ref={csvRef} type="file" accept=".csv" className="hidden-input" onChange={e => handleImport(e.target.files[0])} />
       <input ref={restoreRef} type="file" accept=".json" className="hidden-input" onChange={e => handleRestore(e.target.files[0])} />
+
+      {/* ── MANAGE CLASS ADVISORS ── */}
+      {activeView === 'admin-admins' && (
+        <section id="view-admin-admins" className="view">
+          <div className="page-header">
+            <div>
+              <h1 className="page-title">Class Advisor Management</h1>
+              <p className="page-subtitle">Create and manage accounts for class advisors representing each department section</p>
+            </div>
+            <div className="page-actions">
+              <button className="btn btn-ghost btn-sm" onClick={load}><i className="fas fa-sync-alt"></i> Refresh</button>
+              <button className="btn btn-primary btn-sm" onClick={() => showModal({
+                title: 'Create Class Advisor Account',
+                content: <BranchAdminFormModal onSave={load} onClose={closeModal} showToast={showToast} />
+              })}><i className="fas fa-plus"></i> Add Class Advisor</button>
+            </div>
+          </div>
+
+          {/* ── CREDENTIALS QUICK-REFERENCE CARD ── */}
+          <div className="card" style={{ marginBottom: 24, padding: 24, background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <i className="fas fa-id-card" style={{ fontSize: '1.1rem', color: 'var(--brand-primary)' }}></i>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Class Advisor Login Credentials</h3>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
+              {branchAdmins.map(adv => (
+                <div key={adv.email} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  background: 'var(--hover-bg)', borderRadius: 10, padding: '10px 14px',
+                  border: '1px solid var(--border)'
+                }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
+                    background: nameToColor(adv.fullName),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontWeight: 700, fontSize: '0.78rem'
+                  }}>{getInitials(adv.fullName)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adv.fullName}</p>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--brand-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adv.email}</p>
+                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adv.representedClass}</p>
+                  </div>
+                  <button
+                    title="Copy email"
+                    onClick={() => { navigator.clipboard.writeText(adv.email); showToast('Copied', adv.email, 'success'); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, fontSize: '0.85rem' }}
+                  ><i className="fas fa-copy"></i></button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card table-card">
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Full Name</th>
+                    <th>Email Address</th>
+                    <th>Represented Class</th>
+                    <th>Created Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {branchAdmins.length === 0 ? (
+                    <tr>
+                      <td colSpan={5}>
+                        <div className="empty-state">
+                          <div className="empty-icon"><i className="fas fa-users-cog"></i></div>
+                          <h3>No class advisors found</h3>
+                          <p>Add advisor accounts to delegate student management to class representatives.</p>
+                          <button className="btn btn-primary" onClick={() => showModal({
+                            title: 'Create Class Advisor Account',
+                            content: <BranchAdminFormModal onSave={load} onClose={closeModal} showToast={showToast} />
+                          })}><i className="fas fa-plus"></i> Add Class Advisor</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    branchAdmins.map(admin => (
+                      <tr key={admin.email}>
+                        <td>
+                          <div className="student-name-cell">
+                            <div className="student-avatar-sm" style={{ background: nameToColor(admin.fullName), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.75rem' }}>{getInitials(admin.fullName)}</div>
+                            <span>{admin.fullName}</span>
+                          </div>
+                        </td>
+                        <td>{admin.email}</td>
+                        <td><span style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>{admin.representedClass}</span></td>
+                        <td>{formatDate(admin.createdAt)}</td>
+                        <td>
+                          <div className="table-actions">
+                            <button className="action-btn edit" title="Edit" onClick={() => showModal({
+                              title: 'Edit Class Advisor',
+                              content: <BranchAdminFormModal admin={admin} onSave={load} onClose={closeModal} showToast={showToast} />
+                            })}><i className="fas fa-edit"></i></button>
+                            <button className="action-btn reset" title="Reset Password" onClick={() => showModal({
+                              title: 'Reset Password',
+                              content: <ResetAdminPasswordModal admin={admin} onClose={closeModal} showToast={showToast} />
+                            })}><i className="fas fa-key"></i></button>
+                            <button className="action-btn delete" title="Delete" onClick={() => {
+                              showConfirm({
+                                title: 'Delete Class Advisor',
+                                message: `Delete class advisor account for <strong>${admin.fullName}</strong>? This will revoke their access completely.`,
+                                confirmText: 'Delete',
+                                type: 'danger',
+                                onConfirm: () => {
+                                  Storage.deleteUser(admin.email);
+                                  Storage.addActivity({ type: 'delete', text: `Main Admin deleted class advisor account for <strong>${admin.fullName}</strong>` });
+                                  showToast('Deleted', 'Class advisor removed.', 'success');
+                                  load();
+                                }
+                              });
+                            }}><i className="fas fa-trash"></i></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── ADMIN DASHBOARD ── */}
       {activeView === 'admin-dashboard' && (
@@ -1148,12 +1587,18 @@ export default function AdminDashboard({ activeView, onNavigate }) {
 
           {trTab === 'aptitude' && (
             <div className="card">
-              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <h3 className="card-title">Aptitude Question Bank ({Storage.getAptitudeQuestions().length})</h3>
-                <button className="btn btn-primary btn-sm" onClick={() => showModal({
-                  title: 'Add Aptitude Question',
-                  content: <AddAptitudeQuestionModal onSave={load} onClose={closeModal} showToast={showToast} />
-                })}><i className="fas fa-plus"></i> Add Question</button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="file" accept=".xlsx, .xls, .csv" id="import-apt-file" style={{ display: 'none' }} onChange={handleImportAptitude} />
+                  <button className="btn btn-ghost btn-sm" onClick={() => document.getElementById('import-apt-file').click()}>
+                    <i className="fas fa-file-excel" style={{ color: 'var(--brand-primary)' }}></i> Import Excel/CSV
+                  </button>
+                  <button className="btn btn-primary btn-sm" onClick={() => showModal({
+                    title: 'Add Aptitude Question',
+                    content: <AddAptitudeQuestionModal onSave={load} onClose={closeModal} showToast={showToast} />
+                  })}><i className="fas fa-plus"></i> Add Question</button>
+                </div>
               </div>
               <div className="card-body">
                 <div className="table-responsive">
@@ -1199,13 +1644,19 @@ export default function AdminDashboard({ activeView, onNavigate }) {
 
           {trTab === 'coding' && (
             <div className="card">
-              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <h3 className="card-title">Coding Challenges Directory ({Storage.getCodingQuestions().length})</h3>
-                <button className="btn btn-primary btn-sm" onClick={() => showModal({
-                  title: 'Add Coding Challenge',
-                  maxWidth: '620px',
-                  content: <AddCodingQuestionModal onSave={load} onClose={closeModal} showToast={showToast} />
-                })}><i className="fas fa-plus"></i> Add Challenge</button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="file" accept=".xlsx, .xls, .csv" id="import-coding-file" style={{ display: 'none' }} onChange={handleImportCoding} />
+                  <button className="btn btn-ghost btn-sm" onClick={() => document.getElementById('import-coding-file').click()}>
+                    <i className="fas fa-file-excel" style={{ color: 'var(--brand-primary)' }}></i> Import Excel/CSV
+                  </button>
+                  <button className="btn btn-primary btn-sm" onClick={() => showModal({
+                    title: 'Add Coding Challenge',
+                    maxWidth: '620px',
+                    content: <AddCodingQuestionModal onSave={load} onClose={closeModal} showToast={showToast} />
+                  })}><i className="fas fa-plus"></i> Add Challenge</button>
+                </div>
               </div>
               <div className="card-body">
                 <div className="table-responsive">
@@ -1441,52 +1892,56 @@ function AdminSettings({ theme, applyTheme, onExport, onImport, onBackup, onRest
       <div className="page-header"><div><h1 className="page-title">Settings</h1><p className="page-subtitle">System preferences and account settings</p></div></div>
       <div className="settings-grid">
         {/* College Profile */}
-        <div className="card" style={{ gridColumn: '1 / -1' }}>
-          <div className="card-header"><h3 className="card-title"><i className="fas fa-university"></i> College Profile</h3></div>
-          <div className="card-body">
-            <form className="settings-form" onSubmit={handleCollegeSave} noValidate>
-              <div className="form-row">
-                <div className="form-group flex-2">
-                  <label className="form-label">College Name *</label>
-                  <div className="input-wrapper">
-                    <i className="fas fa-university input-icon"></i>
-                    <input className="form-input" value={college.name} onChange={e => setCollege(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Sri Ramakrishna Engineering College" />
+        {currentUser && currentUser.isMainAdmin && (
+          <div className="card" style={{ gridColumn: '1 / -1' }}>
+            <div className="card-header"><h3 className="card-title"><i className="fas fa-university"></i> College Profile</h3></div>
+            <div className="card-body">
+              <form className="settings-form" onSubmit={handleCollegeSave} noValidate>
+                <div className="form-row">
+                  <div className="form-group flex-2">
+                    <label className="form-label">College Name *</label>
+                    <div className="input-wrapper">
+                      <i className="fas fa-university input-icon"></i>
+                      <input className="form-input" value={college.name} onChange={e => setCollege(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Sri Ramakrishna Engineering College" />
+                    </div>
+                    {collegeMsg && <span className="field-error">{collegeMsg}</span>}
                   </div>
-                  {collegeMsg && <span className="field-error">{collegeMsg}</span>}
-                </div>
-                <div className="form-group flex-1">
-                  <label className="form-label">College Register No. / Code</label>
-                  <div className="input-wrapper">
-                    <i className="fas fa-barcode input-icon"></i>
-                    <input className="form-input" value={college.registerNumber || ''} onChange={e => setCollege(p => ({ ...p, registerNumber: e.target.value }))} placeholder="e.g. SREC-6112" />
+                  <div className="form-group flex-1">
+                    <label className="form-label">College Register No. / Code</label>
+                    <div className="input-wrapper">
+                      <i className="fas fa-barcode input-icon"></i>
+                      <input className="form-input" value={college.registerNumber || ''} onChange={e => setCollege(p => ({ ...p, registerNumber: e.target.value }))} placeholder="e.g. SREC-6112" />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">College Address</label>
-                <div className="input-wrapper">
-                  <i className="fas fa-map-marker-alt input-icon"></i>
-                  <textarea className="form-input" style={{ minHeight: 70, padding: '10px 10px 10px 38px', resize: 'vertical' }} value={college.address} onChange={e => setCollege(p => ({ ...p, address: e.target.value }))} placeholder="e.g. Vattamalaipalayam, Coimbatore - 641022, Tamil Nadu" />
+                <div className="form-group">
+                  <label className="form-label">College Address</label>
+                  <div className="input-wrapper">
+                    <i className="fas fa-map-marker-alt input-icon"></i>
+                    <textarea className="form-input" style={{ minHeight: 70, padding: '10px 10px 10px 38px', resize: 'vertical' }} value={college.address} onChange={e => setCollege(p => ({ ...p, address: e.target.value }))} placeholder="e.g. Vattamalaipalayam, Coimbatore - 641022, Tamil Nadu" />
+                  </div>
                 </div>
-              </div>
-              <button type="submit" className="btn btn-primary"><i className="fas fa-save"></i> Save College Profile</button>
-            </form>
+                <button type="submit" className="btn btn-primary"><i className="fas fa-save"></i> Save College Profile</button>
+              </form>
+            </div>
           </div>
-        </div>
+        )}
         <div className="card"><div className="card-header"><h3 className="card-title"><i className="fas fa-palette"></i> Appearance</h3></div>
           <div className="card-body"><div className="setting-row"><div><strong>Theme</strong><p className="setting-desc">Switch between light and dark mode</p></div>
             <div className="theme-toggle-switch"><span>Light</span><label className="toggle-switch"><input type="checkbox" checked={theme === 'dark'} onChange={e => applyTheme(e.target.checked ? 'dark' : 'light')} /><span className="toggle-slider"></span></label><span>Dark</span></div>
           </div></div>
         </div>
-        <div className="card"><div className="card-header"><h3 className="card-title"><i className="fas fa-database"></i> Data Management</h3></div>
-          <div className="card-body"><div className="setting-actions">
-            <button className="btn btn-outline" onClick={onExport}><i className="fas fa-file-export"></i> Export CSV</button>
-            <button className="btn btn-outline" onClick={onImport}><i className="fas fa-file-import"></i> Import CSV</button>
-            <button className="btn btn-outline" onClick={onBackup}><i className="fas fa-download"></i> Backup JSON</button>
-            <button className="btn btn-outline" onClick={onRestore}><i className="fas fa-upload"></i> Restore JSON</button>
-            <button className="btn btn-danger" onClick={onClear}><i className="fas fa-exclamation-triangle"></i> Clear All Data</button>
-          </div></div>
-        </div>
+        {currentUser && currentUser.isMainAdmin && (
+          <div className="card"><div className="card-header"><h3 className="card-title"><i className="fas fa-database"></i> Data Management</h3></div>
+            <div className="card-body"><div className="setting-actions">
+              <button className="btn btn-outline" onClick={onExport}><i className="fas fa-file-export"></i> Export CSV</button>
+              <button className="btn btn-outline" onClick={onImport}><i className="fas fa-file-import"></i> Import CSV</button>
+              <button className="btn btn-outline" onClick={onBackup}><i className="fas fa-download"></i> Backup JSON</button>
+              <button className="btn btn-outline" onClick={onRestore}><i className="fas fa-upload"></i> Restore JSON</button>
+              <button className="btn btn-danger" onClick={onClear}><i className="fas fa-exclamation-triangle"></i> Clear All Data</button>
+            </div></div>
+          </div>
+        )}
         <div className="card"><div className="card-header"><h3 className="card-title"><i className="fas fa-key"></i> Change Admin Password</h3></div>
           <div className="card-body"><form className="settings-form" onSubmit={handlePwSubmit} noValidate>
             <div className="form-group"><label className="form-label">Current Password</label><div className="input-wrapper"><i className="fas fa-lock input-icon"></i><input type="password" className="form-input" value={pw.cur} onChange={spw('cur')} /></div>{pwErr.cur && <span className="field-error">{pwErr.cur}</span>}</div>

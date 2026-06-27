@@ -1,8 +1,21 @@
 /**
  * storage.js – Data persistence utilities (React compatible)
+ *
+ * Hybrid persistence model:
+ *   1. Synchronous localStorage read/write (always)
+ *   2. Fire-and-forget async Supabase sync (when credentials exist)
  */
 
 import { uid, hashPassword } from './helpers.js';
+import {
+  pushUsers,
+  upsertUser as sbUpsertUser,
+  deleteRemoteUser as sbDeleteUser,
+  pushActivity as sbPushActivity,
+  pushTraining as sbPushTraining,
+  pushCollegeProfile as sbPushCollegeProfile,
+  syncFromRemote,
+} from './supabase.js';
 
 const KEYS = {
   USERS: 'srms_users',
@@ -19,13 +32,22 @@ const KEYS = {
 
 // Training API accessors
 export const getAptitudeQuestions = () => get(KEYS.TRAINING_APTITUDE, []);
-export const setAptitudeQuestions = (questions) => set(KEYS.TRAINING_APTITUDE, questions);
+export const setAptitudeQuestions = (questions) => {
+  set(KEYS.TRAINING_APTITUDE, questions);
+  sbPushTraining('aptitude', questions); // background sync
+};
 
 export const getCodingQuestions = () => get(KEYS.TRAINING_CODING, []);
-export const setCodingQuestions = (questions) => set(KEYS.TRAINING_CODING, questions);
+export const setCodingQuestions = (questions) => {
+  set(KEYS.TRAINING_CODING, questions);
+  sbPushTraining('coding', questions); // background sync
+};
 
 export const getCompanyPrep = () => get(KEYS.TRAINING_COMPANY, {});
-export const setCompanyPrep = (content) => set(KEYS.TRAINING_COMPANY, content);
+export const setCompanyPrep = (content) => {
+  set(KEYS.TRAINING_COMPANY, content);
+  sbPushTraining('company', content); // background sync
+};
 
 // Generic read/write helpers
 export const get = (key, fallback = null) => {
@@ -54,16 +76,19 @@ export const getUser = (email) => {
 
 export const saveUser = (data) => {
   const users = getUsers();
-  users[data.email.toLowerCase()] = { ...data, email: data.email.toLowerCase() };
+  const record = { ...data, email: data.email.toLowerCase(), updatedAt: new Date().toISOString() };
+  users[record.email] = record;
   setUsers(users);
+  sbUpsertUser(record); // background sync
 };
 
 export const updateUser = (email, updates) => {
   const users = getUsers();
   const key = email.toLowerCase();
   if (users[key]) {
-    users[key] = { ...users[key], ...updates };
+    users[key] = { ...users[key], ...updates, updatedAt: new Date().toISOString() };
     setUsers(users);
+    sbUpsertUser(users[key]); // background sync
     return users[key];
   }
   return null;
@@ -73,11 +98,17 @@ export const deleteUser = (email) => {
   const users = getUsers();
   delete users[email.toLowerCase()];
   setUsers(users);
+  sbDeleteUser(email.toLowerCase()); // background sync
 };
 
 export const getAllStudents = () => {
   const users = getUsers();
   return Object.values(users).filter(u => u.role === 'student');
+};
+
+export const getAllBranchAdmins = () => {
+  const users = getUsers();
+  return Object.values(users).filter(u => u.role === 'admin' && !u.isMainAdmin);
 };
 
 export const emailExists = (email, excludeEmail = null) => {
@@ -100,7 +131,10 @@ export const registerNumberExists = (regNo, excludeEmail = null) => {
 
 // College Profile
 export const getCollegeProfile = () => get(KEYS.COLLEGE_PROFILE, { name: '', address: '', registerNumber: '' });
-export const setCollegeProfile = (profile) => set(KEYS.COLLEGE_PROFILE, profile);
+export const setCollegeProfile = (profile) => {
+  set(KEYS.COLLEGE_PROFILE, profile);
+  sbPushCollegeProfile(profile); // background sync
+};
 
 // Session & Auth management
 export const getSession = () => get(KEYS.SESSION) || get(KEYS.REMEMBER);
@@ -130,9 +164,11 @@ export const getActivity = () => get(KEYS.ACTIVITY, []);
 
 export const addActivity = (entry) => {
   const log = getActivity();
-  log.unshift({ ...entry, id: uid(), timestamp: new Date().toISOString() });
+  const newEntry = { ...entry, id: uid(), timestamp: new Date().toISOString() };
+  log.unshift(newEntry);
   if (log.length > MAX_ACTIVITY) log.length = MAX_ACTIVITY;
   set(KEYS.ACTIVITY, log);
+  sbPushActivity(newEntry); // background sync
 };
 
 export const clearActivity = () => set(KEYS.ACTIVITY, []);
@@ -164,6 +200,9 @@ export const clearAllData = () => {
   clearActivity();
 };
 
+// Re-export syncFromRemote so AuthContext can call it without importing supabase.js directly
+export { syncFromRemote };
+
 // Seeding Default Database
 export const seedIfEmpty = () => {
   // Seed default college profile if not set
@@ -176,182 +215,216 @@ export const seedIfEmpty = () => {
   }
 
   const users = getUsers();
-  if (Object.keys(users).length > 0) return; // Database already seeded
+  if (users['admin@srms.edu'] && !users['admin@srms.edu'].isMainAdmin) {
+    users['admin@srms.edu'].isMainAdmin = true;
+    setUsers(users);
+  }
+  const forceReSeed = !localStorage.getItem('srms_seeded_extended_v2');
+  if (Object.keys(users).length > 0 && !forceReSeed) return; // Already seeded and migrated
+
+  const targetUsers = {};
 
   // Seed Admin Account
   const adminPass = hashPassword('Admin@123');
-  users['admin@srms.edu'] = {
+  targetUsers['admin@srms.edu'] = {
     role: 'admin',
     email: 'admin@srms.edu',
     fullName: 'System Administrator',
     passwordHash: adminPass,
     createdAt: new Date().toISOString(),
+    isMainAdmin: true,
   };
 
-  // Seed Sample Students (Engineering courses only)
-  const sampleStudents = [
-    { studentId: 'S2024001', registerNumber: 'REG2024001', fullName: 'Arjun Sharma', email: 'arjun.sharma@students.srms.edu', phone: '+91-9876543201', dob: '2002-03-15', address: '12 Anna Nagar, Chennai', course: 'B.E. Computer Science and Engineering', yearLevel: '3', enrollmentDate: '2022-08-15', status: 'Active' },
-    { studentId: 'S2024002', registerNumber: 'REG2024002', fullName: 'Priya Rajan', email: 'priya.rajan@students.srms.edu', phone: '+91-9876543202', dob: '2001-07-22', address: '45 T. Nagar, Chennai', course: 'B.E. Electronics and Communication Engineering', yearLevel: '4', enrollmentDate: '2021-08-12', status: 'Active' },
-    { studentId: 'S2024003', registerNumber: 'REG2024003', fullName: 'Karthik Venkat', email: 'karthik.venkat@students.srms.edu', phone: '+91-9876543203', dob: '2000-11-05', address: '78 Velachery Main Rd, Chennai', course: 'M.E. Computer Science and Engineering', yearLevel: 'Graduate', enrollmentDate: '2020-08-10', status: 'Graduated' },
-    { studentId: 'S2024004', registerNumber: 'REG2024004', fullName: 'Deepa Krishnan', email: 'deepa.krishnan@students.srms.edu', phone: '+91-9876543204', dob: '2003-01-30', address: '23 Porur, Chennai', course: 'B.E. Electrical and Electronics Engineering', yearLevel: '2', enrollmentDate: '2023-08-14', status: 'Active' },
-    { studentId: 'S2024005', registerNumber: 'REG2024005', fullName: 'Rahul Murugan', email: 'rahul.murugan@students.srms.edu', phone: '+91-9876543205', dob: '2002-09-18', address: '56 Tambaram, Chennai', course: 'B.E. Mechanical Engineering', yearLevel: '3', enrollmentDate: '2022-08-16', status: 'Active' },
-    { studentId: 'S2024006', registerNumber: 'REG2024006', fullName: 'Divya Nair', email: 'divya.nair@students.srms.edu', phone: '+91-9876543206', dob: '2001-04-12', address: '89 Chromepet, Chennai', course: 'B.Tech Information Technology', yearLevel: '4', enrollmentDate: '2021-08-11', status: 'Suspended' },
-    { studentId: 'S2024007', registerNumber: 'REG2024007', fullName: 'Vishnu Balaji', email: 'vishnu.balaji@students.srms.edu', phone: '+91-9876543207', dob: '2003-06-25', address: '34 Avadi, Chennai', course: 'B.Tech Artificial Intelligence and Data Science', yearLevel: '1', enrollmentDate: '2024-01-08', status: 'Active' },
-    { studentId: 'S2024008', registerNumber: 'REG2024008', fullName: 'Ananya Subramanian', email: 'ananya.sub@students.srms.edu', phone: '+91-9876543208', dob: '2000-12-10', address: '67 Guindy, Chennai', course: 'M.E. Power Electronics and Drives', yearLevel: 'Graduate', enrollmentDate: '2023-01-09', status: 'Active' },
-    { studentId: 'S2024009', registerNumber: 'REG2024009', fullName: 'Surya Prakash', email: 'surya.prakash@students.srms.edu', phone: '+91-9876543209', dob: '2002-08-03', address: '11 Poonamallee, Chennai', course: 'B.E. Civil Engineering', yearLevel: '3', enrollmentDate: '2022-08-15', status: 'Withdrawn' },
-    { studentId: 'S2024010', registerNumber: 'REG2024010', fullName: 'Meena Selvam', email: 'meena.selvam@students.srms.edu', phone: '+91-9876543210', dob: '2001-02-14', address: '90 Maduravoyal, Chennai', course: 'B.Tech Cyber Security', yearLevel: '4', enrollmentDate: '2021-08-13', status: 'Active' },
-    { studentId: 'S2024011', registerNumber: 'REG2024011', fullName: 'Arun Kumar', email: 'arun.kumar@students.srms.edu', phone: '+91-9876543211', dob: '2003-10-07', address: '55 Sholinganallur, Chennai', course: 'B.Tech Robotics and Automation', yearLevel: '1', enrollmentDate: '2024-01-10', status: 'Active' },
-    { studentId: 'S2024012', registerNumber: 'REG2024012', fullName: 'Pavithra Devi', email: 'pavithra.devi@students.srms.edu', phone: '+91-9876543212', dob: '2000-05-20', address: '22 Thiruvanmiyur, Chennai', course: 'M.E. Structural Engineering', yearLevel: 'Graduate', enrollmentDate: '2023-08-14', status: 'Active' },
+  const depts = [
+    { code: 'CSE', name: 'B.E. Computer Science and Engineering' },
+    { code: 'ECE', name: 'B.E. Electronics and Communication Engineering' },
+    { code: 'EEE', name: 'B.E. Electrical and Electronics Engineering' },
+    { code: 'IT', name: 'B.Tech Information Technology' },
+    { code: 'Mech', name: 'B.E. Mechanical Engineering' },
+    { code: 'Civil', name: 'B.E. Civil Engineering' }
+  ];
+  const sections = ['Sec A', 'Sec B', 'Sec C'];
+
+  const adminNames = [
+    'Prof. Arun Kumar',      // CSE Sec A
+    'Prof. Divya Nair',       // CSE Sec B
+    'Prof. Sanjay Prasad',    // CSE Sec C
+    'Prof. Priya Rajan',      // ECE Sec A
+    'Prof. Karthik Venkat',   // ECE Sec B
+    'Prof. Lakshmi Iyer',     // ECE Sec C
+    'Prof. Rahul Murugan',    // EEE Sec A
+    'Prof. Deepa Krishnan',   // EEE Sec B
+    'Prof. Balaji Rao',       // EEE Sec C
+    'Prof. Ananya Subramanian',// IT Sec A
+    'Prof. Vishnu Balaji',    // IT Sec B
+    'Prof. Sandhya Pillai',   // IT Sec C
+    'Prof. Rajesh Chettiar',  // Mech Sec A
+    'Prof. Swathi Reddy',     // Mech Sec B
+    'Prof. Vignesh Naidu',    // Mech Sec C
+    'Prof. Meena Selvam',     // Civil Sec A
+    'Prof. Surya Prakash',    // Civil Sec B
+    'Prof. Preethi Sastry'     // Civil Sec C
+  ];
+
+  const firstNames = [
+    'Arjun', 'Priya', 'Karthik', 'Deepa', 'Rahul', 'Divya', 'Vishnu', 'Ananya', 'Surya', 'Meena',
+    'Arun', 'Pavithra', 'Sanjay', 'Lakshmi', 'Vignesh', 'Sandhya', 'Manoj', 'Sneha', 'Ramesh', 'Shruti',
+    'Vijay', 'Preethi', 'Rajesh', 'Swathi', 'Mohan', 'Balaji', 'Pooja', 'Ganesh', 'Kavitha', 'Hari',
+    'Siddharth', 'Nisha', 'Vikram', 'Aparna', 'Pranav', 'Ritu', 'Aditya', 'Jyothi', 'Kiran', 'Sweta'
+  ];
+  const lastNames = [
+    'Sharma', 'Rajan', 'Venkat', 'Krishnan', 'Murugan', 'Nair', 'Balaji', 'Subramanian', 'Prakash', 'Selvam',
+    'Kumar', 'Devi', 'Prasad', 'Iyer', 'Pillai', 'Naidu', 'Reddy', 'Chettiar', 'Sastry', 'Rao',
+    'Choudhury', 'Patel', 'Joshi', 'Mehta', 'Gupta', 'Verma', 'Singh', 'Pandey', 'Roy', 'Sen',
+    'Menon', 'Nambiar', 'Babu', 'Dhar', 'Das', 'Bose', 'Dutta', 'Banerjee', 'Chatterjee', 'Mukherjee'
   ];
 
   const defaultPass = hashPassword('Student@123');
-  sampleStudents.forEach((s, idx) => {
-    // Generate simulated placement details
-    let eligibility = 'Eligible';
-    let placementStatus = 'Unplaced';
-    let appliedCount = 0;
-    let shortlistedCount = 0;
-    let selectedCount = 0;
-    let offersCount = 0;
-    let highestPackage = 0;
-    let averagePackage = 0;
-    let internshipDetails = '';
-    let joiningStatus = 'Not Placed';
-    let interviewStatus = 'None';
-    let offerLetterStatus = 'Not Applicable';
-    let offers = [];
-    let history = [
-      { date: s.enrollmentDate, event: 'Enrolled in course program' },
-      { date: new Date(new Date(s.enrollmentDate).getTime() + 180 * 24 * 3600000).toISOString().split('T')[0], event: 'Registered with Training & Placement Cell' }
-    ];
+  let adminIdx = 0;
 
-    if (s.status === 'Suspended' || s.status === 'Withdrawn' || s.yearLevel === '1' || s.yearLevel === '2') {
-      eligibility = 'Not Eligible';
-    }
+  depts.forEach((dept, deptIdx) => {
+    sections.forEach((sec, secIdx) => {
+      const className = `${dept.name} - ${sec}`;
+      const adminName = adminNames[adminIdx++];
+      const adminEmail = `${dept.code.toLowerCase()}.${sec.toLowerCase().replace(' ', '')}.admin@srms.edu`;
 
-    if (eligibility === 'Eligible') {
-      if (s.status === 'Graduated' || s.studentId === 'S2024002' || s.studentId === 'S2024008' || s.studentId === 'S2024010') {
-        placementStatus = 'Placed';
-        appliedCount = 5 + (idx % 3);
-        shortlistedCount = 3;
-        selectedCount = 2;
-        offersCount = 2;
-        joiningStatus = 'Joined';
-        interviewStatus = 'Completed';
-        offerLetterStatus = 'Received';
-        
-        let comp1 = idx % 2 === 0 ? 'Zoho' : 'TCS';
-        let comp2 = idx % 2 === 0 ? 'Infosys' : 'Accenture';
-        let sal1 = idx % 2 === 0 ? 8.5 : 4.2;
-        let sal2 = idx % 2 === 0 ? 3.6 : 6.5;
-        
-        offers = [
-          { company: comp1, role: 'Software Engineer', salary: sal1, status: 'Selected', interviewStatus: 'Completed', joiningStatus: 'Joined', offerLetterStatus: 'Received' },
-          { company: comp2, role: 'Associate Software Engineer', salary: sal2, status: 'Selected', interviewStatus: 'Completed', joiningStatus: 'Declined', offerLetterStatus: 'Received' }
+      targetUsers[adminEmail] = {
+        role: 'admin',
+        email: adminEmail,
+        fullName: adminName,
+        passwordHash: adminPass,
+        representedClass: className,
+        isMainAdmin: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Generate 10 students for this class
+      for (let sIdx = 1; sIdx <= 10; sIdx++) {
+        const fIdx = (deptIdx * 17 + secIdx * 11 + sIdx * 3) % firstNames.length;
+        const lIdx = (deptIdx * 13 + secIdx * 19 + sIdx * 7) % lastNames.length;
+        const first = firstNames[fIdx];
+        const last = lastNames[lIdx];
+        const fullName = `${first} ${last}`;
+        const email = `${first.toLowerCase()}.${last.toLowerCase()}.${dept.code.toLowerCase()}.${sec.toLowerCase().replace(' ', '')}.${sIdx}@students.srms.edu`;
+        const studentId = `S2026${dept.code}${sec.replace('Sec ', '')}${String(sIdx).padStart(3, '0')}`;
+        const registerNumber = `REG2026${dept.code}${sec.replace('Sec ', '')}${String(sIdx).padStart(3, '0')}`;
+        const phone = `+91-9876543${String(100 + deptIdx * 15 + secIdx * 5 + sIdx)}`;
+        const dob = `2004-05-${String(10 + sIdx)}`;
+        const address = `${10 + sIdx} Campus Rd, Coimbatore`;
+        const yearLevel = String((sIdx % 4) + 1); // 1st, 2nd, 3rd, 4th year
+        const status = sIdx === 9 ? 'Suspended' : (sIdx === 10 ? 'Withdrawn' : 'Active');
+        const enrollmentDate = `202${5 - (sIdx % 4)}-08-15`;
+
+        // Placement & training simulation
+        let eligibility = 'Eligible';
+        let placementStatus = 'Unplaced';
+        let appliedCount = 0;
+        let shortlistedCount = 0;
+        let selectedCount = 0;
+        let offersCount = 0;
+        let highestPackage = 0;
+        let averagePackage = 0;
+        let internshipDetails = '';
+        let joiningStatus = 'Not Placed';
+        let interviewStatus = 'None';
+        let offerLetterStatus = 'Not Applicable';
+        let offers = [];
+        let history = [
+          { date: enrollmentDate, event: 'Enrolled in course program' },
+          { date: new Date(new Date(enrollmentDate).getTime() + 180 * 24 * 3600000).toISOString().split('T')[0], event: 'Registered with Training & Placement Cell' }
         ];
-        highestPackage = Math.max(sal1, sal2);
-        averagePackage = parseFloat(((sal1 + sal2) / 2).toFixed(2));
-        internshipDetails = `Completed 6-month software development internship at ${comp1}`;
-        history.push(
-          { date: '2025-09-15', event: `Applied to ${comp2}` },
-          { date: '2025-10-10', event: `Shortlisted for ${comp2} technical and HR rounds` },
-          { date: '2025-10-22', event: `Received job offer from ${comp2} with package ${sal2} LPA` },
-          { date: '2025-11-05', event: `Applied to ${comp1}` },
-          { date: '2025-12-01', event: `Offered Software Developer role at ${comp1} with package of ${sal1} LPA` },
-          { date: '2026-01-15', event: `Accepted offer from ${comp1} and marked joining status as Joined` }
-        );
-      } else if (idx % 2 === 0) {
-        placementStatus = 'In Progress';
-        appliedCount = 3;
-        shortlistedCount = 1;
-        selectedCount = 0;
-        offersCount = 0;
-        interviewStatus = 'Scheduled';
-        joiningStatus = 'Not Placed';
-        offerLetterStatus = 'Not Applicable';
-        offers = [
-          { company: 'Wipro', role: 'Project Engineer', salary: 3.5, status: 'Shortlisted', interviewStatus: 'Scheduled', joiningStatus: 'Pending', offerLetterStatus: 'Pending' },
-          { company: 'Cognizant', role: 'Programmer Analyst', salary: 4.0, status: 'Applied', interviewStatus: 'Pending', joiningStatus: 'Pending', offerLetterStatus: 'Pending' }
-        ];
-        history.push(
-          { date: '2026-04-10', event: 'Applied to Cognizant' },
-          { date: '2026-05-02', event: 'Applied to Wipro' },
-          { date: '2026-05-20', event: 'Shortlisted for Wipro technical interview rounds' }
-        );
-      } else {
-        placementStatus = 'Unplaced';
-        appliedCount = 2;
-        offers = [
-          { company: 'Capgemini', role: 'Software Analyst', salary: 4.2, status: 'Applied', interviewStatus: 'Pending', joiningStatus: 'Pending', offerLetterStatus: 'Pending' }
-        ];
-        history.push(
-          { date: '2026-05-15', event: 'Applied to Capgemini' }
-        );
+
+        if (status === 'Suspended' || status === 'Withdrawn' || yearLevel === '1' || yearLevel === '2') {
+          eligibility = 'Not Eligible';
+        }
+
+        if (eligibility === 'Eligible') {
+          if (sIdx % 3 === 0) { // Placed
+            placementStatus = 'Placed';
+            appliedCount = 4;
+            shortlistedCount = 2;
+            selectedCount = 1;
+            offersCount = 1;
+            joiningStatus = 'Joined';
+            interviewStatus = 'Completed';
+            offerLetterStatus = 'Received';
+            const company = sIdx % 2 === 0 ? 'Zoho' : 'TCS';
+            const salary = sIdx % 2 === 0 ? 8.5 : 4.5;
+            offers = [{ company, role: 'Software Engineer', salary, status: 'Selected', interviewStatus: 'Completed', joiningStatus: 'Joined', offerLetterStatus: 'Received' }];
+            highestPackage = salary;
+            averagePackage = salary;
+            internshipDetails = `Completed internship at ${company}`;
+            history.push(
+              { date: '2025-09-15', event: `Applied to ${company}` },
+              { date: '2025-10-22', event: `Received job offer from ${company} with package ${salary} LPA` }
+            );
+          } else if (sIdx % 3 === 1) { // In Progress
+            placementStatus = 'In Progress';
+            appliedCount = 2;
+            shortlistedCount = 1;
+            interviewStatus = 'Scheduled';
+            const company = 'Wipro';
+            offers = [{ company, role: 'Project Engineer', salary: 4.0, status: 'Shortlisted', interviewStatus: 'Scheduled', joiningStatus: 'Pending', offerLetterStatus: 'Pending' }];
+            history.push(
+              { date: '2026-04-10', event: `Applied to ${company}` },
+              { date: '2026-05-20', event: `Shortlisted for ${company} interview` }
+            );
+          }
+        }
+
+        const trainingProgress = {
+          aptitudeSolved: eligibility === 'Eligible' ? (placementStatus === 'Placed' ? 9 : 5) : 0,
+          aptitudeTotal: 10,
+          codingSolved: eligibility === 'Eligible' ? (placementStatus === 'Placed' ? 5 : 2) : 0,
+          codingTotal: 6,
+          quizzesTaken: eligibility === 'Eligible' ? [{ category: 'Quantitative Aptitude', score: 80, date: '2026-02-15' }] : [],
+          codingProblemsSolved: eligibility === 'Eligible' ? ['code_py_1', 'code_cpp_2'] : [],
+          companyPrepViewed: eligibility === 'Eligible' ? ['TCS'] : []
+        };
+
+        targetUsers[email] = {
+          role: 'student',
+          studentId,
+          registerNumber,
+          fullName,
+          email,
+          passwordHash: defaultPass,
+          phone,
+          dob,
+          address,
+          course: className,
+          yearLevel,
+          status,
+          enrollmentDate,
+          profilePhoto: null,
+          placement: {
+            eligibility,
+            status: placementStatus,
+            appliedCount,
+            shortlistedCount,
+            selectedCount,
+            offersCount,
+            offers,
+            highestPackage,
+            averagePackage,
+            internshipDetails,
+            joiningStatus,
+            interviewStatus,
+            offerLetterStatus,
+            placementHistory: history
+          },
+          trainingProgress,
+          activityLog: [{ type: 'create', text: 'Account created by seed', timestamp: new Date().toISOString() }],
+          createdAt: enrollmentDate,
+          updatedAt: new Date().toISOString()
+        };
       }
-    }
-
-    const trainingProgress = {
-      aptitudeSolved: 0,
-      aptitudeTotal: 10,
-      codingSolved: 0,
-      codingTotal: 6,
-      quizzesTaken: [],
-      codingProblemsSolved: [],
-      companyPrepViewed: []
-    };
-
-    if (placementStatus === 'Placed') {
-      trainingProgress.aptitudeSolved = 8;
-      trainingProgress.codingSolved = 5;
-      trainingProgress.quizzesTaken = [
-        { category: 'Quantitative Aptitude', score: 80, date: '2026-02-15' },
-        { category: 'Logical Reasoning', score: 100, date: '2026-02-18' },
-        { category: 'Verbal Ability', score: 80, date: '2026-02-20' },
-        { category: 'Data Interpretation', score: 60, date: '2026-02-25' }
-      ];
-      trainingProgress.codingProblemsSolved = ['code_py_1', 'code_cpp_2', 'code_java_3', 'code_js_5', 'code_sql_4'];
-      trainingProgress.companyPrepViewed = [idx % 2 === 0 ? 'Zoho' : 'TCS', 'Infosys'];
-    } else if (placementStatus === 'In Progress') {
-      trainingProgress.aptitudeSolved = 4;
-      trainingProgress.codingSolved = 2;
-      trainingProgress.quizzesTaken = [
-        { category: 'Quantitative Aptitude', score: 60, date: '2026-04-05' },
-        { category: 'Logical Reasoning', score: 80, date: '2026-04-12' }
-      ];
-      trainingProgress.codingProblemsSolved = ['code_py_1', 'code_c_6'];
-      trainingProgress.companyPrepViewed = ['Wipro'];
-    }
-
-    users[s.email] = {
-      ...s,
-      role: 'student',
-      passwordHash: defaultPass,
-      profilePhoto: null,
-      placement: {
-        eligibility,
-        status: placementStatus,
-        appliedCount,
-        shortlistedCount,
-        selectedCount,
-        offersCount,
-        offers,
-        highestPackage,
-        averagePackage,
-        internshipDetails,
-        joiningStatus,
-        interviewStatus,
-        offerLetterStatus,
-        placementHistory: history
-      },
-      trainingProgress,
-      activityLog: [
-        { type: 'create', text: 'Account created', timestamp: new Date(Date.now() - Math.random() * 90 * 86400000).toISOString() }
-      ],
-      createdAt: s.enrollmentDate,
-    };
+    });
   });
 
-  setUsers(users);
+  setUsers(targetUsers);
+  pushUsers(targetUsers); // Sync to remote Supabase database if configured
+  localStorage.setItem('srms_seeded_extended_v2', 'true');
 
   // Seed Aptitude Questions
   const aptitudeQ = [

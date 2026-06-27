@@ -17,7 +17,7 @@ function LoadingScreen({ visible }) {
     <div id="loading-screen" className={`loading-screen${visible ? '' : ' fade-out'}`} style={{ display: visible ? undefined : 'none' }}>
       <div className="loading-logo">
         <div className="loading-icon"><i className="fas fa-graduation-cap"></i></div>
-        <h1 className="loading-title">SRMS</h1>
+        <h1 className="loading-title">CareerBridge</h1>
         <p className="loading-subtitle">Student Registration &amp; Management System</p>
         <div className="loading-bar"><div className="loading-progress"></div></div>
       </div>
@@ -45,7 +45,11 @@ function InnerApp() {
   // Set default view when user changes
   useEffect(() => {
     if (currentUser) {
-      setActiveView(currentUser.role === 'admin' ? 'admin-dashboard' : 'student-dashboard');
+      if (currentUser.role === 'admin') {
+        setActiveView(currentUser.isMainAdmin ? 'admin-admins' : 'admin-dashboard');
+      } else {
+        setActiveView('student-training');
+      }
       setMobileOpen(false);
     } else {
       setActiveView(null);

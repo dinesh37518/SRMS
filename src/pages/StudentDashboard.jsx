@@ -835,7 +835,7 @@ export default function StudentDashboard({ activeView, onNavigate }) {
             <div className="profile-left">
               <div className="card student-id-card">
                 <div className="id-card-header">
-                  <div className="id-card-brand"><i className="fas fa-graduation-cap"></i> SRMS</div>
+                  <div className="id-card-brand"><i className="fas fa-graduation-cap"></i> CareerBridge</div>
                   <span className="id-card-label">STUDENT ID</span>
                 </div>
                 <div className="id-card-photo" style={{ background: student.profilePhoto ? 'none' : nameToColor(student.fullName), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '2rem', borderRadius: 12, overflow: 'hidden' }}>

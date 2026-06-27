@@ -15,27 +15,43 @@ const ADMIN_NAV = [
 ];
 
 const STUDENT_NAV = [
-  { view: 'student-dashboard', icon: 'fa-th-large', label: 'Dashboard' },
-  { view: 'student-profile', icon: 'fa-user-circle', label: 'My Profile' },
-  { view: 'student-placement', icon: 'fa-briefcase', label: 'My Placement' },
   { view: 'student-training', icon: 'fa-laptop-code', label: 'Placement Training' },
-  { view: 'student-companies', icon: 'fa-building', label: 'Company Prep' },
-  { view: 'student-courses', icon: 'fa-book-open', label: 'My Courses' },
-  { view: 'student-activity', icon: 'fa-history', label: 'Activity Log' },
-  { view: 'student-settings', icon: 'fa-cog', label: 'Settings' },
 ];
 
 export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCollapse, mobileOpen, onCloseMobile }) {
   const { currentUser, logout, showConfirm } = useAuth();
   if (!currentUser) return null;
 
-  const navItems = currentUser.role === 'admin' ? ADMIN_NAV : STUDENT_NAV;
-  const sectionLabel = currentUser.role === 'admin' ? 'Admin Panel' : 'Student Portal';
+  let navItems = [];
+  let sectionLabel = '';
+
+  if (currentUser.role === 'admin') {
+    if (currentUser.isMainAdmin) {
+      navItems = [
+        { view: 'admin-admins', icon: 'fa-users-cog', label: 'Manage Class Advisors' },
+        { view: 'admin-training', icon: 'fa-laptop-code', label: 'Placement Questions' },
+        { view: 'admin-settings', icon: 'fa-sliders-h', label: 'System Settings' }
+      ];
+      sectionLabel = 'Main Admin Panel';
+    } else {
+      navItems = [
+        { view: 'admin-dashboard', icon: 'fa-th-large', label: 'Dashboard' },
+        { view: 'admin-students', icon: 'fa-users', label: 'Students' },
+        { view: 'admin-placement', icon: 'fa-briefcase', label: 'Placement Cell' },
+        { view: 'admin-activity', icon: 'fa-history', label: 'Activity' },
+        { view: 'admin-settings', icon: 'fa-sliders-h', label: 'Settings' },
+      ];
+      sectionLabel = 'Class Advisor Panel';
+    }
+  } else {
+    navItems = STUDENT_NAV;
+    sectionLabel = 'Student Portal';
+  }
 
   const handleLogout = () => {
     showConfirm({
       title: 'Sign Out',
-      message: 'Are you sure you want to sign out of SRMS?',
+      message: 'Are you sure you want to sign out of CareerBridge?',
       confirmText: 'Sign Out',
       type: 'danger',
       onConfirm: logout,
@@ -60,7 +76,7 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
         <div className="sidebar-header">
           <div className="sidebar-brand">
             <div className="brand-icon-sm"><i className="fas fa-graduation-cap"></i></div>
-            <span className="brand-text">SRMS</span>
+            <span className="brand-text">CareerBridge</span>
           </div>
           <button id="sidebar-toggle" className="sidebar-toggle" aria-label="Toggle sidebar" onClick={onToggleCollapse}>
             <i className="fas fa-bars"></i>
@@ -98,8 +114,18 @@ export default function Sidebar({ activeView, onNavigate, collapsed, onToggleCol
               }
             </div>
             <div className="sidebar-user-info">
-              <p className="sidebar-user-name">{currentUser.role === 'admin' ? 'Administrator' : currentUser.fullName}</p>
-              <p className="sidebar-user-role">{currentUser.role === 'admin' ? 'System Admin' : 'Student'}</p>
+              <p className="sidebar-user-name">
+                {currentUser.role === 'admin'
+                  ? (currentUser.isMainAdmin ? 'Main Administrator' : currentUser.fullName)
+                  : currentUser.fullName
+                }
+              </p>
+              <p className="sidebar-user-role">
+                {currentUser.role === 'admin'
+                  ? (currentUser.isMainAdmin ? 'Main Admin' : `Class Advisor (${currentUser.representedClass ? currentUser.representedClass.replace('B.E. ', '').replace('B.Tech ', '').replace('M.E. ', '') : 'Class'})`)
+                  : 'Student'
+                }
+              </p>
             </div>
           </div>
           <button className="btn-icon logout-btn" id="sidebar-logout" title="Logout" aria-label="Logout" onClick={handleLogout}>

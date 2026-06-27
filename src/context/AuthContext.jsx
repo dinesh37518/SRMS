@@ -3,7 +3,10 @@
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as Storage from '../utils/storage.js';
-import { getTheme, setTheme as saveTheme, getLoggedInEmail, getUser, clearSession, clearRemember, addActivity } from '../utils/storage.js';
+import {
+  getTheme, setTheme as saveTheme, getLoggedInEmail, getUser,
+  clearSession, clearRemember, addActivity, syncFromRemote,
+} from '../utils/storage.js';
 
 const AuthContext = createContext(null);
 
@@ -20,15 +23,32 @@ export const AuthProvider = ({ children }) => {
     saveTheme(theme);
   }, [theme]);
 
-  // On mount: seed data, restore session
+  // On mount: seed data, restore session, sync from remote
   useEffect(() => {
-    Storage.seedIfEmpty();
-    const email = getLoggedInEmail();
-    if (email) {
-      const user = getUser(email);
-      if (user) setCurrentUser(user);
-    }
-    setTimeout(() => setLoading(false), 1200);
+    const init = async () => {
+      Storage.seedIfEmpty();
+
+      // Pull latest data from Supabase (no-op if not configured)
+      await syncFromRemote({
+        getLocalUsers: Storage.getUsers,
+        setLocalUsers: Storage.setUsers,
+        getLocalActivity: Storage.getActivity,
+        setLocalActivity: (data) => Storage.set('srms_activity', data),
+        setAptitudeQuestions: Storage.setAptitudeQuestions,
+        setCodingQuestions: Storage.setCodingQuestions,
+        setCompanyPrep: Storage.setCompanyPrep,
+        setCollegeProfile: Storage.setCollegeProfile,
+      });
+
+      // Restore session after potential remote merge
+      const email = getLoggedInEmail();
+      if (email) {
+        const user = getUser(email);
+        if (user) setCurrentUser(user);
+      }
+      setTimeout(() => setLoading(false), 600);
+    };
+    init();
   }, []);
 
   const toggleTheme = useCallback(() => {

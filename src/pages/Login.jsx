@@ -10,12 +10,24 @@ import {
 } from '../utils/helpers.js';
 
 const COURSES = [
-  'B.E. Computer Science and Engineering',
-  'B.E. Electronics and Communication Engineering',
-  'B.E. Electrical and Electronics Engineering',
-  'B.E. Mechanical Engineering',
-  'B.E. Civil Engineering',
-  'B.Tech Information Technology',
+  'B.E. Computer Science and Engineering - Sec A',
+  'B.E. Computer Science and Engineering - Sec B',
+  'B.E. Computer Science and Engineering - Sec C',
+  'B.E. Electronics and Communication Engineering - Sec A',
+  'B.E. Electronics and Communication Engineering - Sec B',
+  'B.E. Electronics and Communication Engineering - Sec C',
+  'B.E. Electrical and Electronics Engineering - Sec A',
+  'B.E. Electrical and Electronics Engineering - Sec B',
+  'B.E. Electrical and Electronics Engineering - Sec C',
+  'B.Tech Information Technology - Sec A',
+  'B.Tech Information Technology - Sec B',
+  'B.Tech Information Technology - Sec C',
+  'B.E. Mechanical Engineering - Sec A',
+  'B.E. Mechanical Engineering - Sec B',
+  'B.E. Mechanical Engineering - Sec C',
+  'B.E. Civil Engineering - Sec A',
+  'B.E. Civil Engineering - Sec B',
+  'B.E. Civil Engineering - Sec C',
   'B.Tech Artificial Intelligence and Data Science',
   'B.Tech Cyber Security',
   'B.Tech Robotics and Automation',
@@ -51,13 +63,23 @@ export default function Login() {
     if (!user) { setLoginErrors({ email: 'No account found with this email.' }); showToast('Login Failed', 'Account not found.', 'error'); return; }
     const { verifyPassword } = await import('../utils/helpers.js');
     if (!verifyPassword(loginPass, user.passwordHash)) { setLoginErrors({ pass: 'Incorrect password.' }); showToast('Login Failed', 'Incorrect password.', 'error'); return; }
-    if (role === 'admin' && user.role !== 'admin') { setLoginErrors({ email: 'This account does not have admin privileges.' }); return; }
-    if (role === 'student' && user.role !== 'student') { setLoginErrors({ email: 'Please use the Admin tab.' }); return; }
-    if (user.role === 'student') {
+
+    // Role-tab validation
+    if (role === 'admin') {
+      if (user.role !== 'admin' || !user.isMainAdmin) {
+        setLoginErrors({ email: 'This tab is for the Main Administrator only.' }); return;
+      }
+    } else if (role === 'advisor') {
+      if (user.role !== 'admin' || user.isMainAdmin) {
+        setLoginErrors({ email: 'No class advisor account found with this email.' }); return;
+      }
+    } else if (role === 'student') {
+      if (user.role !== 'student') { setLoginErrors({ email: 'Please use the Admin or Class Advisor tab.' }); return; }
       Storage.updateUser(user.email, {
         activityLog: [{ type: 'login', text: 'Logged in', timestamp: new Date().toISOString() }, ...(user.activityLog || []).slice(0, 49)]
       });
     }
+
     showToast('Welcome back!', `Signed in as ${user.fullName || loginEmail}`, 'success');
     login(Storage.getUser(user.email), rememberMe);
   };
@@ -167,7 +189,7 @@ export default function Login() {
       <div className="auth-left-content">
         <div className="auth-brand">
           <div className="brand-icon"><i className="fas fa-graduation-cap"></i></div>
-          <h1 className="brand-name">SRMS</h1>
+          <h1 className="brand-name">CareerBridge</h1>
         </div>
         <h2 className="auth-headline">{headline}</h2>
         <p className="auth-tagline">{tagline}</p>
@@ -190,17 +212,31 @@ export default function Login() {
     <div id="page-auth" className="page page-auth">
       <section id="view-login" className="auth-view">
         <AuthLeft
-          headline="Welcome Back!"
-          tagline="Sign in to access your student portal and manage your academic journey."
-          features={[{ icon: 'fa-shield-alt', text: 'Secure Access' }, { icon: 'fa-chart-line', text: 'Track Progress' }, { icon: 'fa-bell', text: 'Stay Updated' }]}
+          headline={role === 'student' ? 'Welcome Back!' : role === 'advisor' ? 'Class Advisor Portal' : 'Admin Portal'}
+          tagline={
+            role === 'student'
+              ? 'Sign in to access your student portal and manage your academic journey.'
+              : role === 'advisor'
+              ? 'Sign in as a Class Advisor to manage your department section students and placement records.'
+              : 'Sign in as the System Administrator to manage the full institution.'
+          }
+          features={[
+            { icon: 'fa-shield-alt', text: 'Secure Access' },
+            { icon: 'fa-chart-line', text: role === 'advisor' ? 'Manage Your Class' : 'Track Progress' },
+            { icon: role === 'advisor' ? 'fa-chalkboard-teacher' : 'fa-bell', text: role === 'advisor' ? 'Section Dashboard' : 'Stay Updated' }
+          ]}
         />
         <div className="auth-right">
           <div className="auth-card glass-card">
-            <div className="auth-card-header"><h2>Sign In</h2><p>Enter your credentials to continue</p></div>
-            <div className="role-tabs">
-              {['student', 'admin'].map(r => (
-                <button key={r} className={`role-tab${role === r ? ' active' : ''}`} onClick={() => setRole(r)}>
-                  <i className={`fas ${r === 'student' ? 'fa-user-graduate' : 'fa-user-shield'}`}></i> {r.charAt(0).toUpperCase() + r.slice(1)}
+            <div className="auth-card-header"><h2>Sign In</h2><p>Select your role and enter your credentials</p></div>
+            <div className="role-tabs" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+              {[
+                { key: 'student', icon: 'fa-user-graduate', label: 'Student' },
+                { key: 'advisor', icon: 'fa-chalkboard-teacher', label: 'Class Advisor' },
+                { key: 'admin', icon: 'fa-user-shield', label: 'Main Admin' },
+              ].map(({ key, icon, label }) => (
+                <button key={key} className={`role-tab${role === key ? ' active' : ''}`} onClick={() => { setRole(key); setLoginErrors({}); }}>
+                  <i className={`fas ${icon}`}></i> {label}
                 </button>
               ))}
             </div>
@@ -209,7 +245,9 @@ export default function Login() {
                 <label className="form-label">Email Address</label>
                 <div className="input-wrapper">
                   <i className="fas fa-envelope input-icon"></i>
-                  <input type="email" className="form-input" placeholder="your@email.com" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} autoComplete="email" />
+                  <input type="email" className="form-input" placeholder={
+                    role === 'advisor' ? 'cse.seca.admin@srms.edu' : role === 'admin' ? 'admin@srms.edu' : 'your@email.com'
+                  } value={loginEmail} onChange={e => setLoginEmail(e.target.value)} autoComplete="email" />
                 </div>
                 {loginErrors.email && <span className="field-error">{loginErrors.email}</span>}
               </div>
@@ -227,18 +265,26 @@ export default function Login() {
                   <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} />
                   <span className="checkmark"></span> Remember me
                 </label>
-                <button type="button" className="link-btn" onClick={() => setAuthView('forgot')}>Forgot Password?</button>
+                {role === 'student' && (
+                  <button type="button" className="link-btn" onClick={() => setAuthView('forgot')}>Forgot Password?</button>
+                )}
               </div>
               <button type="submit" className={`btn btn-primary btn-full btn-lg${loginLoading ? ' loading' : ''}`} disabled={loginLoading}>
                 <span className="btn-text">Sign In</span><i className="fas fa-arrow-right"></i>
               </button>
+              {role === 'advisor' && (
+                <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--hover-bg)', borderRadius: 10, border: '1px solid var(--border)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <i className="fas fa-info-circle" style={{ marginRight: 6, color: 'var(--brand-primary)' }}></i>
+                  Use your advisor email (e.g. <strong>cse.seca.admin@srms.edu</strong>) and password <strong>Admin@123</strong>
+                </div>
+              )}
+              {role !== 'advisor' && (
+                <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.85rem', color: 'var(--text-muted, #888)', lineHeight: '1.4' }}>
+                  <i className="fas fa-info-circle" style={{ marginRight: 4 }}></i>
+                  Account registration is managed by administrators. Please sign in using your assigned credentials.
+                </p>
+              )}
             </form>
-            <div className="auth-divider"><span>New student?</span></div>
-            <button className="btn btn-outline btn-full" onClick={() => { setAuthView('register'); setStep(1); }}>Create Account</button>
-            <p style={{ textAlign: 'center', marginTop: 10, fontSize: '0.8rem', color: 'var(--text-muted, #888)' }}>
-              <i className="fas fa-info-circle" style={{ marginRight: 4 }}></i>
-              Account created by admin? Sign in with your assigned credentials — no registration needed.
-            </p>
           </div>
         </div>
       </section>
